@@ -1,18 +1,23 @@
 #! /usr/bin/env python3
 
 import os, sys, re
+
+
 def userInput():
     input = os.read(0, 500)
     input = input.decode()
     return input
-def redirect(command, inputFile, outputFile):
+
+
+def redirect(command):
     rc = os.fork()
     if rc < 0:
         sys.exit(1)
     elif rc == 0:  # child
-        args = [command, inputFile]
+        args = re.split(" ", command)
+        args.remove(">")
         os.close(1)  # redirect child's stdout
-        os.open(outputFile, os.O_CREAT | os.O_WRONLY);
+        os.open(args[2], os.O_CREAT | os.O_WRONLY);
         os.set_inheritable(1, True)
         for dir in re.split(":", os.environ['PATH']):  # try each directory in path
             program = "%s/%s" % (dir, args[0])
@@ -20,33 +25,26 @@ def redirect(command, inputFile, outputFile):
                 os.execve(program, args, os.environ)  # try to exec program
             except FileNotFoundError:  # ...expected
                 pass  # ...fail quietly
-        os.write(2, ("Child:    Error: Could not exec %s\n" % args[0]).encode())
         sys.exit(1)  # terminate with error
     else:  # parent (forked ok)
         childPidCode = os.wait()
         os.write(1, ("Parent: Child %d terminated with exit code %d\n" %
                      childPidCode).encode())
+
+
 def changeDirectory(newPath):
     try:
         # Change the current working Directory
         os.chdir(newPath)
-        os.write(1,("Directory changed").encode())
     except OSError:
-        os.write(1,("Can't change the Current Working Directory").encode())
-def listCD():
-    filesInDirectory = os.listdir('.')
-    for i in filesInDirectory:
-        os.write(1, i.encode())
-        os.write(1, "\n".encode())
-def runNewProcess(command, file):
+        os.write(1, ("Can't change the Current Working Directory\n").encode())
+
+
+def runNewProcess(args):
     rc = os.fork()
-
     if rc < 0:
-        os.write(2, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
-
     elif rc == 0:  # child
-        args = [command, file]
         for dir in re.split(":", os.environ['PATH']):  # try each directory in the path
             program = "%s/%s" % (dir, args[0])
             try:
@@ -54,28 +52,50 @@ def runNewProcess(command, file):
             except FileNotFoundError:  # ...expected
                 pass  # ...fail quietly
 
-        os.write(2, ("Child:    Could not exec %s\n" % args[0]).encode())
+        os.write(2, ("Could not exec %s\n" % args[0]).encode())
         sys.exit(1)  # terminate with error
-
     else:  # parent (forked ok)
         childPidCode = os.wait()
-uInput = " "
+
+
+def piping(args):
+    pr, pw = os.pipe()
+    for f in (pr, pw):
+        os.set_inheritable(f, True)
+    args = [i.strip() for i in re.split('[\x7c]', args)]
+    print(args)
+    rc = os.fork()
+    if rc < 0:
+        sys.exit(1)
+    elif rc == 0:  # child - will write to pipe
+        os.close(1)  # redirect child's stdout
+        os.dup(pw)
+        os.set_inheritable(1, True)
+        for fd in (pr, pw):
+            os.close(fd)
+        runNewProcess(args[0].split())
+    else:  # parent (forked ok)
+        os.close(0)
+        os.dup(pr)
+        os.set_inheritable(0, True)
+        for fd in (pw, pr):
+            os.close(fd)
+        runNewProcess(args[1].split())
+
+
 PS1 = "$ "
-while (uInput):
-    os.write(1,PS1.encode())
+while True:
+    os.write(1, PS1.encode())
     uInput = userInput()
     uInput = uInput.strip()
     inputList = re.split(" ", uInput)
-    if(inputList[0] == "cd"):
-        changeDirectory(inputList[1])
-    elif(inputList[0] == "ls"):
-        listCD()
-    elif(inputList[0] == "exit()"):
+    if ("cd" in inputList):
+        changeDirectory(uInput[3:])
+    elif ("exit" in inputList):
         exit()
-    elif(len(inputList) == 3):
-        redirect(inputList[0], inputList[1], inputList[2])
+    elif (">" in inputList):
+        redirect(uInput)
+    elif ("|" in inputList):
+        piping(uInput)
     else:
-        runNewProcess(inputList[0], inputList[1])
-
-
-
+        runNewProcess(inputList)
