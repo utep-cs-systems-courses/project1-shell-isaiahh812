@@ -9,11 +9,11 @@ def redirect(command):
     elif rc == 0:  # child
         args = re.split(" ", command)
         if(">" in args):
-            pass
+            args.remove(">")
+            print(args)
         elif("<" in args):
-            args[1],args[3] = args[3],args[1]
-        args.remove(">")
-        args.remove("<")
+            args.remove("<")
+            args[1],args[2] = args[2],args[1]
         os.close(1)  # redirect child's stdout
         os.open(args[2], os.O_CREAT | os.O_WRONLY);
         os.set_inheritable(1, True)
@@ -124,7 +124,7 @@ while True:
             pass
     elif ("exit" in inputList):
         exit()
-    elif (">" in inputList):
+    elif ((">" in inputList) or ("<" in inputList)):
         redirect(uInput)
     elif ("|" in inputList):
         piping(uInput)
