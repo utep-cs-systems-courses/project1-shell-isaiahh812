@@ -10,7 +10,6 @@ def redirect(command):
         args = re.split(" ", command)
         if(">" in args):
             args.remove(">")
-            print(args)
         elif("<" in args):
             args.remove("<")
             args[1],args[2] = args[2],args[1]
@@ -26,8 +25,8 @@ def redirect(command):
         sys.exit(1)  # terminate with error
     else:  # parent (forked ok)
         childPidCode = os.wait()
-        os.write(1, ("Parent: Child %d terminated with exit code %d\n" %
-                     childPidCode).encode())
+        #os.write(1, ("Parent: Child %d terminated with exit code %d\n" %
+         #            childPidCode).encode())
 
 
 def changeDirectory(newPath):
@@ -35,8 +34,7 @@ def changeDirectory(newPath):
         # Change the current working Directory
         os.chdir(newPath)
     except OSError:
-        os.write(1, ("Can't change the Current Working Directory\n").encode())
-
+        os.write(2, ("Can't change the Current Working Directory\n").encode())
 
 def runNewProcess(args):
     rc = os.fork()
@@ -112,23 +110,27 @@ def background(args):
 
         os.write(2, ("Could not exec %s\n" % args[0]).encode())
         sys.exit(1)  # terminate with error
-PS1 = "$ "
-while True:
-    os.write(1, PS1.encode())
-    uInput = input()
-    uInput = uInput.rstrip()
-    inputList = re.split(" ", uInput)
-    if ("cd" in inputList):
-        #changeDirectory(uInput[3:])
+def main():
+    while True:
+        if 'PS1' in os.environ:
+            os.write(1, (os.environ['PS1']).encode())
+        else:
+            os.write(1, ("$ ").encode())
+        uInput = os.read(0,100)
+        uInput = uInput.rstrip()
+        inputList = re.split(" ", uInput)
+        if ("cd" in inputList):
             os.chdir(uInput.split()[1])
             pass
-    elif ("exit" in inputList):
-        exit()
-    elif ((">" in inputList) or ("<" in inputList)):
-        redirect(uInput)
-    elif ("|" in inputList):
-        piping(uInput)
-    elif("&" in inputList):
-        background(inputList)
-    else:
-        runNewProcess(inputList)
+        elif ("exit" in inputList):
+            exit()
+        elif ((">" in inputList) or ("<" in inputList)):
+            redirect(uInput)
+        elif ("|" in inputList):
+            piping(uInput)
+        elif("&" in inputList):
+            background(inputList)
+        else:
+            runNewProcess(inputList)
+if '__main__' == __name__:
+    main()
